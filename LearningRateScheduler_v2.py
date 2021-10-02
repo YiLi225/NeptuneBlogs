@@ -1,4 +1,4 @@
- '''
+'''
 How to choose learning rate with Neptune
 '''
 ###### Create Neptune project 
@@ -8,8 +8,11 @@ import os
 
 # Connect your script to Neptune
 ### guide to update this init function, https://docs.neptune.ai/migration-guide
+
+myProject = 'YourUserName/YourProjectName'  ## ## 'YourUserName/YourProjectName'
+
 project = neptune.init(api_token=os.getenv('NEPTUNE_API_TOKEN'),
-                       project='YourUserName/YourProjectName') ## 'YourUserName/YourProjectName'
+                       project=myProject) ## 'YourUserName/YourProjectName'
 
 
 project.stop()
@@ -28,8 +31,9 @@ from tensorflow.keras.models import Model,Sequential
 import tensorflow.keras.backend as K
 from tensorflow.keras.losses import binary_crossentropy
 from tensorflow.keras.utils import to_categorical
-from tensorflow.keras.callbacks import Callback, LearningRateScheduler 
-
+from tensorflow.keras.callbacks import Callback, LearningRateScheduler
+from neptune.new.integrations.tensorflow_keras import NeptuneCallback
+ 
 from sklearn.metrics import f1_score
 from tensorflow import random_normal_initializer
 from numpy import argmax
@@ -141,11 +145,13 @@ if CURRENT_LR_SCHEDULER == 'constant':
     # Create an experiment and log the model with the new Neptune API
     npt_exp = neptune.init(    
         api_token=os.getenv('NEPTUNE_API_TOKEN'),
-        project='YourUserName/YourProjectName', 
+        project=myProject, 
         name='ConstantLR', 
         description='constant-lr', 
         tags=['LearingRate', 'constant', 'baseline', 'neptune'])       
         
+    neptune_cbk = NeptuneCallback(run=npt_exp, base_namespace='metrics')
+
     ### Baseline model: constant learning rate 
     initial_learning_rate = 0.01
     epochs = 100
@@ -162,7 +168,8 @@ if CURRENT_LR_SCHEDULER == 'constant':
         x_train, y_train, 
         epochs=epochs,
         validation_data=(x_test, y_test),
-        batch_size=64
+        batch_size=64, 
+        callbacks=[neptune_cbk]
     )
     
     ### Track on Neptune: Plot learning rate over time 
@@ -177,7 +184,7 @@ elif CURRENT_LR_SCHEDULER == 'Keras-buildin':
     # Create an experiment and log the model     
     npt_exp = neptune.init(    
         api_token=os.getenv('NEPTUNE_API_TOKEN'),
-        project='YourUserName/YourProjectName', 
+        project=myProject, 
         name='KerasBuildInDecay', 
         description='Keras-standard-lr-decay',
         tags=['LearningRate', 'standard', 'decay', 'neptune'])  
@@ -213,10 +220,14 @@ elif CURRENT_LR_SCHEDULER == 'time-based':
     # Create an experiment and log the model 
     npt_exp_1 = neptune.init(    
         api_token=os.getenv('NEPTUNE_API_TOKEN'),
-        project='YourUserName/YourProjectName', 
+        project=myProject, 
         name='TimeBasedLRDecay',  
         description='time-based-lr-decay', 
         tags=['LearningRate', 'timebased', 'decay', 'neptune'])  
+    
+    ### specify the Neptune callback 
+    neptune_cbk = NeptuneCallback(run=npt_exp_1, base_namespace="metrics")
+
 
     def lr_time_based_decay(epoch, lr):
         return lr * 1 / (1 + decay * epoch)
@@ -237,9 +248,11 @@ elif CURRENT_LR_SCHEDULER == 'time-based':
         epochs=epochs, 
         batch_size=64,
         validation_split=0.2,
-        callbacks=[LearningRateScheduler(lr_time_based_decay, verbose=1)])    
+        callbacks=[neptune_cbk, LearningRateScheduler(lr_time_based_decay, verbose=1)])    
     
     ### Track on Neptune: Plot learning rate over time 
+    npt_exp_1['metrics/train/LRSched'].log(trainHistory_timeBasedDecay.history['lr'])
+    
     npt_exp_1['Learning Rate Change (Time-Based Decay)'].upload(neptune.types.File.as_image(plotLR(trainHistory_timeBasedDecay)))
     
     ### Plot the training history 
@@ -255,10 +268,13 @@ elif CURRENT_LR_SCHEDULER == 'step-based': ### aka Discrete Staircase Decay
     # Create an experiment and log the model 
     npt_exp_2 = neptune.init(    
         api_token=os.getenv('NEPTUNE_API_TOKEN'),
-        project='YourUserName/YourProjectName', 
+        project=myProject, 
         name='StepBasedLRDecay',
         description='step-based-lr-decay',
-        tags=['LearningRate', 'stepbased', 'decay', 'neptune'])        
+        tags=['LearningRate', 'stepbased', 'decay', 'neptune']) 
+
+    ### specify the Neptune callback 
+    neptune_cbk = NeptuneCallback(run=npt_exp_2, base_namespace="metrics")       
 
     def lr_step_based_decay(epoch):
         drop_rate = 0.8 
@@ -281,7 +297,7 @@ elif CURRENT_LR_SCHEDULER == 'step-based': ### aka Discrete Staircase Decay
         epochs=epochs, 
         batch_size=64,
         validation_split=0.2,
-        callbacks=[LearningRateScheduler(lr_step_based_decay, verbose=1)])     
+        callbacks=[neptune_cbk, LearningRateScheduler(lr_step_based_decay, verbose=1)])     
     
     ### Track on Neptune: Plot learning rate over time 
     npt_exp_2['Learning Rate Change (Step-Based Decay)'].upload(neptune.types.File.as_image(plotLR(trainHistory_stepBasedDecay)))
@@ -300,10 +316,13 @@ elif CURRENT_LR_SCHEDULER == 'exponential':
     # Create an experiment and log the model     
     npt_exp_3 = neptune.init(    
         api_token=os.getenv('NEPTUNE_API_TOKEN'),
-        project='YourUserName/YourProjectName', 
+        project=myProject, 
         name='ExponentialLRDecay',
         description='exponential-lr-decay',
-        tags=['LearningRate', 'exponential', 'decay', 'neptune'])     
+        tags=['LearningRate', 'exponential', 'decay', 'neptune'])
+
+    ### specify the Neptune callback 
+    neptune_cbk = NeptuneCallback(run=npt_exp_3, base_namespace="metrics")     
     
     def lr_exp_decay(epoch):
         k = 0.1
@@ -325,7 +344,7 @@ elif CURRENT_LR_SCHEDULER == 'exponential':
         epochs=epochs, 
         batch_size=64,
         validation_split=0.2,
-        callbacks=[LearningRateScheduler(lr_exp_decay, verbose=1)])    
+        callbacks=[neptune_cbk, LearningRateScheduler(lr_exp_decay, verbose=1)])    
     
     ### Track on Neptune: Plot learning rate over time 
     npt_exp_3['Learning Rate Change (Exponential Decay)'].upload(neptune.types.File.as_image(plotLR(trainHistory_expDecay)))
@@ -368,12 +387,14 @@ elif CURRENT_LR_SCHEDULER == 'polynomial':
     # Create an experiment and log the model    
     npt_exp_4 = neptune.init(    
         api_token=os.getenv('NEPTUNE_API_TOKEN'),
-        project='YourUserName/YourProjectName', 
+        project=myProject, 
         name=f'{POLY_POWER}LRDecay',
         description=f'{POLY_POWER}-lr-decay',
-        tags=['LearningRate', POLY_POWER, 'decay', 'neptune'])     
+        tags=['LearningRate', POLY_POWER, 'decay', 'neptune'])  
     
-       
+    ### specify the Neptune callback 
+    neptune_cbk = NeptuneCallback(run=npt_exp_4, base_namespace="metrics")
+           
     if POLY_POWER == 'linear':
         curPower = 1.0
     elif POLY_POWER == 'square-root':
@@ -399,7 +420,7 @@ elif CURRENT_LR_SCHEDULER == 'polynomial':
         epochs=epochs, 
         batch_size=64,
         validation_split=0.2,
-        callbacks=[LearningRateScheduler(curScheduler, verbose=1)]) 
+        callbacks=[neptune_cbk, LearningRateScheduler(curScheduler, verbose=1)]) 
     
     if POLY_POWER == 'linear':
         trainHistory_linearDecay = trainHistory_polyDecay
@@ -417,11 +438,13 @@ elif CURRENT_LR_SCHEDULER == 'adaptive':
     # Create an experiment and log the model     
     npt_exp_5 = neptune.init(    
         api_token=os.getenv('NEPTUNE_API_TOKEN'),
-        project='YourUserName/YourProjectName', 
+        project=myProject, 
         name='Adaptive',
         description='adaptive-lr',
         tags=['LearningRate', 'adam', 'neptune'])   
     
+    neptune_cbk = NeptuneCallback(run=npt_exp_5, base_namespace='metrics')
+
     model = runModel()
     model.summary()
     
@@ -439,7 +462,8 @@ elif CURRENT_LR_SCHEDULER == 'adaptive':
         x_train, y_train, 
         epochs=100, 
         batch_size=64,
-        validation_split=0.2)
+        validation_split=0.2, 
+        callbacks=[neptune_cbk])
     
     plot_Neptune(history=trainHistory_adaptive, decayTitle='Adam Optimizer', npt_exp=npt_exp_5)
     npt_exp_5.stop()
@@ -448,7 +472,7 @@ elif CURRENT_LR_SCHEDULER == 'adaptive':
 #=========== Create an experiment and log the model
 npt_exp_master = neptune.init(    
         api_token=os.getenv('NEPTUNE_API_TOKEN'),
-        project='YourUserName/YourProjectName', 
+        project=myProject, 
         name='ModelComparison',
         description='compare-lr-schedulers',
         tags=['LearningRate', 'schedulers', 'comparison', 'neptune'])    
