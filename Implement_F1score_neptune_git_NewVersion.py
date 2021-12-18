@@ -8,7 +8,7 @@ import neptune.new as neptune
 import os
 
 # Connect your script to Neptune new version  
-myProject = "'YourUserName/YourProjectName'" ## !! 'YourUserName/YourProjectName'
+myProject = "YourUserName/YourProjectName" ## !! 'YourUserName/YourProjectName'
 project = neptune.init(api_token=os.getenv('NEPTUNE_API_TOKEN'),
                        project=myProject) 
 project.stop()
@@ -49,7 +49,6 @@ np.set_printoptions(suppress=True)
 
 
 credit_dat = pd.read_csv(r'YourDataPath\creditcard.csv')
-
 
 counts = credit_dat.Class.value_counts()
 class0, class1 = round(counts[0]/sum(counts)*100, 2), round(counts[1]/sum(counts)*100, 2)
@@ -139,11 +138,16 @@ class NeptuneMetrics(Callback):
         
         print(f' — val_f1: {val_f1} — val_precision: {val_precision}, — val_recall: {val_recall}')
         
-        ### Send the performance metrics to Neptune for tracking (new version) ###        
-        self.exp['Epoch End Loss'] = logs['loss']
-        self.exp['Epoch End F1-score'] = val_f1
-        self.exp['Epoch End Precision'] = val_precision
-        self.exp['Epoch End Recall'] = val_recall
+        ### Send the performance metrics to Neptune for tracking (new version 12-18) ###        
+        # self.exp['Epoch End Loss'] = logs['loss']
+        # self.exp['Epoch End F1-score'] = val_f1
+        # self.exp['Epoch End Precision'] = val_precision
+        # self.exp['Epoch End Recall'] = val_recall
+        
+        self.exp['Epoch End Loss'].log(logs['loss'])
+        self.exp['Epoch End F1-score'].log(val_f1)
+        self.exp['Epoch End Precision'].log(val_precision)
+        self.exp['Epoch End Recall'].log(val_recall)
 
         # self.exp.send_metric('Epoch End Loss', logs['loss'])
         # self.exp.send_metric('Epoch End F1-score', val_f1)
@@ -216,7 +220,8 @@ for k_fold, (tr_inds, val_inds) in enumerate(kfold.split(X=x_train, y=y_train)):
         #### send to metric 
         for val in history.history['custom_f1']:
             ## Neptune new version
-            npt_exp['Custom F1 metric'] = val
+            # npt_exp['Custom F1 metric'] = val #### 2021-12-18 udpate
+            npt_exp['Custom F1 metric'].log(val)
             ## npt_exp.send_metric('Custom F1 metric', val)
   
     models.append(model)

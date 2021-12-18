@@ -150,17 +150,18 @@ def calculate_perf_metrics(var, logNeptune=True, logmodelName='Simple MA'):
     if logNeptune:        
         # npt_exp.send_metric('RMSE', rmse)
         # npt_exp.log_metric('RMSE', rmse)
-        npt_exp['RMSE'] = rmse
+        # npt_exp['RMSE'] = rmse  ## 12-18
+        npt_exp['RMSE'].log(rmse)
         
         # npt_exp.send_metric('MAPE (%)', mape)
         # npt_exp.log_metric('MAPE (%)', mape)
-        npt_exp['MAPE (%)'] = mape
+        npt_exp['MAPE (%)'].log(mape)  #### 12-18
     
     return rmse, mape
 
 # 20 days to represent the 22 trading days in a month
 window_size = 50
-CURRENT_MODEL = 'LSTM'
+CURRENT_MODEL = 'EMA'
 
 if CURRENT_MODEL == 'SMA':  
     # Create an experiment and log the model in Neptuen new verison
@@ -285,11 +286,11 @@ elif CURRENT_MODEL == 'LSTM':
     mape_lstm = calculate_mape(np.array(test['Close']), np.array(test['Predictions_lstm']))
     # npt_exp.send_metric('RMSE', rmse_lstm)
     # npt_exp.log_metric('RMSE', rmse_lstm)
-    npt_exp['RMSE'] = rmse_lstm
+    npt_exp['RMSE'].log(rmse_lstm)  ## 12-18
     
     # npt_exp.send_metric('MAPE (%)', mape_lstm)
     # npt_exp.log_metric('MAPE (%)', mape_lstm)
-    npt_exp['MAPE (%)'] = mape_lstm
+    npt_exp['MAPE (%)'].log(mape_lstm)
 
     
     ### Plot prediction and true trends and log to Neptune         
