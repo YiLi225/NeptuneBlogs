@@ -35,281 +35,281 @@ from tensorflow.keras.metrics import Accuracy
 from neptune.new.integrations.tensorflow_keras import NeptuneCallback
 
 
-# # tf.random.set_seed(42)
-# # np.random.seed(42) 
-# # CUR_SEED = 42
+tf.random.set_seed(42)
+np.random.seed(42) 
+CUR_SEED = 42
 
-# ## Input data simulation
-# plt.title('Two Moons with Substantial Overlap')
-# # X, y = make_moons(n_samples=3000, shuffle=True , noise=0.25, random_state=1234)
+## Input data simulation
+plt.title('Two Moons with Substantial Overlap')
 # X, y = make_moons(n_samples=3000, shuffle=True , noise=0.25, random_state=1234)
+X, y = make_moons(n_samples=3000, shuffle=True , noise=0.25, random_state=1234)
 
-# plt.scatter(X[:, 0], X[:, 1], c=y, s=25)    
-# plt.show()
+plt.scatter(X[:, 0], X[:, 1], c=y, s=25)    
+plt.show()
 
 
-# batch_size, n_epochs = 32, 100
+batch_size, n_epochs = 32, 100
 
-# ## Define a function to calculate gradients 
-# ## tf.GradientTape allows us to track TensorFlow computations and calculate gradients w.r.t. (with respect to) some given variables
-# def getBatchGradWgts(grads, wgts, lossVal, 
-#                       gradHist, lossHist, wgtsHist, 
-#                       recordWeight=True, npt_exp=None):
-#     dataGrad, dataWeight = {}, {}
-#     ## batch update 'weights'
-#     for wgt, grad in zip(wgts, grads):
-#         if '/kernel:' not in wgt.name:
-#             continue 
-#         layerName = wgt.name.split("/")[0]         
-#         dataGrad[layerName] = grad.numpy()
-#         dataWeight[layerName] = wgt.numpy()
-#         ## Log in Neptune
-#         if npt_exp:
-#             npt_exp[f'MeanGrads{layerName.upper()}'].log(np.mean(grad.numpy()))   
-#             npt_exp[f'MeanWgtBatch{layerName.upper()}'].log(np.mean(wgt.numpy()))         
+## Define a function to calculate gradients 
+## tf.GradientTape allows us to track TensorFlow computations and calculate gradients w.r.t. (with respect to) some given variables
+def getBatchGradWgts(grads, wgts, lossVal, 
+                      gradHist, lossHist, wgtsHist, 
+                      recordWeight=True, npt_exp=None):
+    dataGrad, dataWeight = {}, {}
+    ## batch update 'weights'
+    for wgt, grad in zip(wgts, grads):
+        if '/kernel:' not in wgt.name:
+            continue 
+        layerName = wgt.name.split("/")[0]         
+        dataGrad[layerName] = grad.numpy()
+        dataWeight[layerName] = wgt.numpy()
+        ## Log in Neptune
+        if npt_exp:
+            npt_exp[f'MeanGrads{layerName.upper()}'].log(np.mean(grad.numpy()))   
+            npt_exp[f'MeanWgtBatch{layerName.upper()}'].log(np.mean(wgt.numpy()))         
         
-#     gradHist.append(dataGrad)
-#     lossHist.append(lossVal.numpy())
-#     if recordWeight:
-#         wgtsHist.append(dataWeight)           
+    gradHist.append(dataGrad)
+    lossHist.append(lossVal.numpy())
+    if recordWeight:
+        wgtsHist.append(dataWeight)           
                 
                 
-# ##Run model based on batch, and then calculate batch gradients/weights               
-# def fitModel(X, y, model, optimizer, 
-#               n_epochs=n_epochs, curBatch_size=batch_size, 
-#               modelType = 'binary', ## regression
-#               npt_exp=None):
+##Run model based on batch, and then calculate batch gradients/weights               
+def fitModel(X, y, model, optimizer, 
+              n_epochs=n_epochs, curBatch_size=batch_size, 
+              modelType = 'binary', ## regression
+              npt_exp=None):
     
-#     if modelType == 'binary':
-#         lossFunc = tf.keras.losses.BinaryCrossentropy()
-#     elif modelType == 'regression':
-#         lossFunc = tf.keras.losses.MeanSquaredError()
+    if modelType == 'binary':
+        lossFunc = tf.keras.losses.BinaryCrossentropy()
+    elif modelType == 'regression':
+        lossFunc = tf.keras.losses.MeanSquaredError()
         
-#     subData = tf.data.Dataset.from_tensor_slices((X, y))
-#     subData = subData.shuffle(buffer_size=42).batch(curBatch_size)
+    subData = tf.data.Dataset.from_tensor_slices((X, y))
+    subData = subData.shuffle(buffer_size=42).batch(curBatch_size)
    
-#     gradHist, lossHist, wgtsHist = [], [], []                    
+    gradHist, lossHist, wgtsHist = [], [], []                    
     
-#     for epoch in range(n_epochs):
-#         print(f'== Starting epoch {epoch} ==')        
-#         for step, (x_batch, y_batch) in enumerate(subData):
-#             with tf.GradientTape() as tape:
-#                 ## Predict with the model and calculate loss
-#                 yPred = model(x_batch, training=True)
-#                 lossVal = lossFunc(y_batch, yPred)
+    for epoch in range(n_epochs):
+        print(f'== Starting epoch {epoch} ==')        
+        for step, (x_batch, y_batch) in enumerate(subData):
+            with tf.GradientTape() as tape:
+                ## Predict with the model and calculate loss
+                yPred = model(x_batch, training=True)
+                lossVal = lossFunc(y_batch, yPred)
                 
-#             ## Calculate gradients using tape and update the weights
-#             grads = tape.gradient(lossVal, model.trainable_weights)
-#             wgts = model.trainable_weights
-#             optimizer.apply_gradients(zip(grads, model.trainable_weights))           
+            ## Calculate gradients using tape and update the weights
+            grads = tape.gradient(lossVal, model.trainable_weights)
+            wgts = model.trainable_weights
+            optimizer.apply_gradients(zip(grads, model.trainable_weights))           
             
-#             ## Save the Interation#5 from each epoch
-#             if step == 5:
-#                 getBatchGradWgts(gradHist=gradHist, lossHist=lossHist, wgtsHist=wgtsHist, 
-#                                  grads=grads, wgts=wgts, lossVal=lossVal, npt_exp=npt_exp) 
-#                 if npt_exp:
-#                     npt_exp['BatchLoss'].log(lossVal)   
+            ## Save the Interation#5 from each epoch
+            if step == 5:
+                getBatchGradWgts(gradHist=gradHist, lossHist=lossHist, wgtsHist=wgtsHist, 
+                                  grads=grads, wgts=wgts, lossVal=lossVal, npt_exp=npt_exp) 
+                if npt_exp:
+                    npt_exp['BatchLoss'].log(lossVal)   
                     
-#     getBatchGradWgts(gradHist=gradHist, lossHist=lossHist, wgtsHist=wgtsHist, 
-#                      grads=grads, wgts=wgts, lossVal=lossVal, npt_exp=npt_exp)    
-#     return gradHist, lossHist, wgtsHist
+    getBatchGradWgts(gradHist=gradHist, lossHist=lossHist, wgtsHist=wgtsHist, 
+                      grads=grads, wgts=wgts, lossVal=lossVal, npt_exp=npt_exp)    
+    return gradHist, lossHist, wgtsHist
 
 
 
-# def gradientsVis(curGradHist, curLossHist, modelName):    
-#     fig, ax = plt.subplots(1, 1, sharex=True, constrained_layout=True, figsize=(7,5))
-#     ax.set_title(f"Mean gradient {modelName}")
-#     for layer in curGradHist[0]:
-#         ax.plot(range(len(curGradHist)), [gradList[layer].mean() for gradList in curGradHist], label=f'Layer_{layer.upper()}')
-#     ax.legend()
-#     return fig
+def gradientsVis(curGradHist, curLossHist, modelName):    
+    fig, ax = plt.subplots(1, 1, sharex=True, constrained_layout=True, figsize=(7,5))
+    ax.set_title(f"Mean gradient {modelName}")
+    for layer in curGradHist[0]:
+        ax.plot(range(len(curGradHist)), [gradList[layer].mean() for gradList in curGradHist], label=f'Layer_{layer.upper()}')
+    ax.legend()
+    return fig
 
 
-# # MODELNAME = 'vanSigBaseline'
-# # MODELNAME = 'vanRelu'
-# # MODELNAME = 'vanSigSmall'
-# # MODELNAME = 'vanBN' ## sometimes work; also scale your input data
-# # MODELNAME = 'vanSigWgtInit' 
-# MODELNAME = 'vanSigLR'
+# MODELNAME = 'vanSigBaseline'
+# MODELNAME = 'vanRelu'
+# MODELNAME = 'vanSigSmall'
+# MODELNAME = 'vanBN' ## sometimes work; also scale your input data
+# MODELNAME = 'vanSigWgtInit' 
+MODELNAME = 'vanSigLR'
 
 
-# ## Create an experiment in Neptune
-# if MODELNAME == 'vanSigBaseline':    
-#     npt_exp = neptune.init(    
-#         api_token=os.getenv('NEPTUNE_API_TOKEN'),
-#         project=myProject, 
-#         name='VanishingGradSigmoid', 
-#         description='Vanishing Gradients with Sigmoid Activation Function', 
-#         tags=['vanishingGradients', 'sigmoid', 'neptune']) 
+## Create an experiment in Neptune
+if MODELNAME == 'vanSigBaseline':    
+    npt_exp = neptune.init(    
+        api_token=os.getenv('NEPTUNE_API_TOKEN'),
+        project=myProject, 
+        name='VanishingGradSigmoid', 
+        description='Vanishing Gradients with Sigmoid Activation Function', 
+        tags=['vanishingGradients', 'sigmoid', 'neptune']) 
     
-#     ## Define Neptune callback 
-#     neptune_cbk = NeptuneCallback(run=npt_exp, base_namespace='metrics')
-#     def binaryModel(curName, curInitializer, curActivation, x_tr=None):
-#         model = Sequential()
-#         model.add(InputLayer(input_shape=(2, ), name=curName+"0"))
-#         model.add(Dense(10, kernel_initializer=curInitializer, activation=curActivation, name=curName+"1"))
-#         model.add(Dense(10, kernel_initializer=curInitializer, activation=curActivation, name=curName+"2"))
-#         model.add(Dense(5, kernel_initializer=curInitializer, activation=curActivation,  name=curName+"3"))
-#         model.add(Dense(1, kernel_initializer=curInitializer, activation='sigmoid', name=curName+"4"))
-#         return model 
+    ## Define Neptune callback 
+    neptune_cbk = NeptuneCallback(run=npt_exp, base_namespace='metrics')
+    def binaryModel(curName, curInitializer, curActivation, x_tr=None):
+        model = Sequential()
+        model.add(InputLayer(input_shape=(2, ), name=curName+"0"))
+        model.add(Dense(10, kernel_initializer=curInitializer, activation=curActivation, name=curName+"1"))
+        model.add(Dense(10, kernel_initializer=curInitializer, activation=curActivation, name=curName+"2"))
+        model.add(Dense(5, kernel_initializer=curInitializer, activation=curActivation,  name=curName+"3"))
+        model.add(Dense(1, kernel_initializer=curInitializer, activation='sigmoid', name=curName+"4"))
+        return model 
     
-#     curOptimizer = tf.keras.optimizers.RMSprop()
-#     optimizer = curOptimizer
-#     curInitializer = RandomUniform(-1, 1)
-#     ## Compile the model
-#     model = binaryModel(curName="SIGMOID", curInitializer=curInitializer, curActivation="sigmoid")  
-#     model.compile(optimizer=curOptimizer, loss='binary_crossentropy', metrics=['accuracy'])
-#     ## Train and Log in Neptune    
-#     curGradHist, curLossHist, curWgtHist = fitModel(X, y, model, optimizer=curOptimizer, npt_exp=npt_exp)
-#     ## log in the plot comparing all layers
-#     npt_exp['Comparing All Layers'].upload(neptune.types.File.as_image(gradientsVis(curGradHist, curLossHist, 
-#                                                                                     modelName='Sigmoid_Raw')))
-#     npt_exp.stop()  
+    curOptimizer = tf.keras.optimizers.RMSprop()
+    optimizer = curOptimizer
+    curInitializer = RandomUniform(-1, 1)
+    ## Compile the model
+    model = binaryModel(curName="SIGMOID", curInitializer=curInitializer, curActivation="sigmoid")  
+    model.compile(optimizer=curOptimizer, loss='binary_crossentropy', metrics=['accuracy'])
+    ## Train and Log in Neptune    
+    curGradHist, curLossHist, curWgtHist = fitModel(X, y, model, optimizer=curOptimizer, npt_exp=npt_exp)
+    ## log in the plot comparing all layers
+    npt_exp['Comparing All Layers'].upload(neptune.types.File.as_image(gradientsVis(curGradHist, curLossHist, 
+                                                                                    modelName='Sigmoid_Raw')))
+    npt_exp.stop()  
 
-# elif MODELNAME == 'vanRelu':
-#     npt_exp = neptune.init(    
-#     api_token=os.getenv('NEPTUNE_API_TOKEN'),
-#     project=myProject, 
-#     name='VanishingGradRelu', 
-#     # description='Vanishing Gradients with Sigmoid Activation Function', 
-#     tags=['vanishingGradients', 'relu', 'neptune']) 
+elif MODELNAME == 'vanRelu':
+    npt_exp = neptune.init(    
+    api_token=os.getenv('NEPTUNE_API_TOKEN'),
+    project=myProject, 
+    name='VanishingGradRelu', 
+    # description='Vanishing Gradients with Sigmoid Activation Function', 
+    tags=['vanishingGradients', 'relu', 'neptune']) 
 
-#     def binaryModel(curName, curInitializer, curActivation, x_tr=None):
-#         model = Sequential()
-#         model.add(InputLayer(input_shape=(2, ), name=curName+"0"))
-#         model.add(Dense(10, kernel_initializer=curInitializer, activation=curActivation, name=curName+"1"))
-#         model.add(Dense(10, kernel_initializer=curInitializer, activation=curActivation, name=curName+"2"))
-#         model.add(Dense(5, kernel_initializer=curInitializer, activation=curActivation,  name=curName+"3"))
-#         model.add(Dense(1, kernel_initializer=curInitializer, activation='sigmoid', name=curName+"4"))
-#         return model 
+    def binaryModel(curName, curInitializer, curActivation, x_tr=None):
+        model = Sequential()
+        model.add(InputLayer(input_shape=(2, ), name=curName+"0"))
+        model.add(Dense(10, kernel_initializer=curInitializer, activation=curActivation, name=curName+"1"))
+        model.add(Dense(10, kernel_initializer=curInitializer, activation=curActivation, name=curName+"2"))
+        model.add(Dense(5, kernel_initializer=curInitializer, activation=curActivation,  name=curName+"3"))
+        model.add(Dense(1, kernel_initializer=curInitializer, activation='sigmoid', name=curName+"4"))
+        return model 
     
-#     curOptimizer = tf.keras.optimizers.RMSprop()
-#     optimizer = curOptimizer
-#     curInitializer = RandomUniform(-1, 1)
-#     ## Compile the model
-#     model = binaryModel(curName="Relu", curInitializer=curInitializer, curActivation="relu")  
-#     model.compile(optimizer=curOptimizer, loss='binary_crossentropy', metrics=['accuracy'])
-#     ## Train and Log in Neptune    
-#     curGradHist, curLossHist, curWgtHist = fitModel(X, y, model, optimizer=curOptimizer, npt_exp=npt_exp)
-#     ## log in the plot comparing all layers
-#     npt_exp['Comparing All Layers'].upload(neptune.types.File.as_image(gradientsVis(curGradHist, curLossHist, modelName='Relu')))
-#     npt_exp.stop() 
+    curOptimizer = tf.keras.optimizers.RMSprop()
+    optimizer = curOptimizer
+    curInitializer = RandomUniform(-1, 1)
+    ## Compile the model
+    model = binaryModel(curName="Relu", curInitializer=curInitializer, curActivation="relu")  
+    model.compile(optimizer=curOptimizer, loss='binary_crossentropy', metrics=['accuracy'])
+    ## Train and Log in Neptune    
+    curGradHist, curLossHist, curWgtHist = fitModel(X, y, model, optimizer=curOptimizer, npt_exp=npt_exp)
+    ## log in the plot comparing all layers
+    npt_exp['Comparing All Layers'].upload(neptune.types.File.as_image(gradientsVis(curGradHist, curLossHist, modelName='Relu')))
+    npt_exp.stop() 
     
-# elif MODELNAME == 'vanSigSmall':
-#     npt_exp = neptune.init(    
-#     api_token=os.getenv('NEPTUNE_API_TOKEN'),
-#     project=myProject, 
-#     name='VanishingGradSigmoidSmall', 
-#     tags=['vanishingGradients', 'sigmoid', 'smallStructure', 'neptune']) 
+elif MODELNAME == 'vanSigSmall':
+    npt_exp = neptune.init(    
+    api_token=os.getenv('NEPTUNE_API_TOKEN'),
+    project=myProject, 
+    name='VanishingGradSigmoidSmall', 
+    tags=['vanishingGradients', 'sigmoid', 'smallStructure', 'neptune']) 
     
-#     def binaryModel(curName, curInitializer, curActivation, x_tr=None):
-#         model = Sequential()      
-#         model.add(InputLayer(input_shape=(2, ), name=curName+"0"))
-#         model.add(Dense(3, kernel_initializer=curInitializer, activation=curActivation,  name=curName+"3"))
-#         model.add(Dense(1, kernel_initializer=curInitializer, activation='sigmoid', name=curName+"4"))
-#         return model 
+    def binaryModel(curName, curInitializer, curActivation, x_tr=None):
+        model = Sequential()      
+        model.add(InputLayer(input_shape=(2, ), name=curName+"0"))
+        model.add(Dense(3, kernel_initializer=curInitializer, activation=curActivation,  name=curName+"3"))
+        model.add(Dense(1, kernel_initializer=curInitializer, activation='sigmoid', name=curName+"4"))
+        return model 
 
-#     curOptimizer = tf.keras.optimizers.RMSprop()
-#     optimizer = curOptimizer
-#     curInitializer = RandomUniform(-1, 1)
-#     ## Compile the model
-#     model = binaryModel(curName="SIGMOID", curInitializer=curInitializer, curActivation="sigmoid")  
-#     model.compile(optimizer=curOptimizer, loss='binary_crossentropy', metrics=['accuracy'])
-#     ## Train and Log in Neptune    
-#     curGradHist, curLossHist, curWgtHist = fitModel(X, y, model, optimizer=curOptimizer, npt_exp=npt_exp)
-#     ## log in the plot comparing all layers
-#     npt_exp['Comparing All Layers'].upload(neptune.types.File.as_image(gradientsVis(curGradHist, curLossHist, modelName='Sigmoid_Small')))
-#     npt_exp.stop()  
+    curOptimizer = tf.keras.optimizers.RMSprop()
+    optimizer = curOptimizer
+    curInitializer = RandomUniform(-1, 1)
+    ## Compile the model
+    model = binaryModel(curName="SIGMOID", curInitializer=curInitializer, curActivation="sigmoid")  
+    model.compile(optimizer=curOptimizer, loss='binary_crossentropy', metrics=['accuracy'])
+    ## Train and Log in Neptune    
+    curGradHist, curLossHist, curWgtHist = fitModel(X, y, model, optimizer=curOptimizer, npt_exp=npt_exp)
+    ## log in the plot comparing all layers
+    npt_exp['Comparing All Layers'].upload(neptune.types.File.as_image(gradientsVis(curGradHist, curLossHist, modelName='Sigmoid_Small')))
+    npt_exp.stop()  
 
-# elif MODELNAME == 'vanBN':
-#     npt_exp = neptune.init(    
-#     api_token=os.getenv('NEPTUNE_API_TOKEN'),
-#     project=myProject, 
-#     name='VanishingGradBatchNorm', 
-#     tags=['vanishingGradients', 'relu', 'batchNormalization', 'neptune'])
+elif MODELNAME == 'vanBN':
+    npt_exp = neptune.init(    
+    api_token=os.getenv('NEPTUNE_API_TOKEN'),
+    project=myProject, 
+    name='VanishingGradBatchNorm', 
+    tags=['vanishingGradients', 'relu', 'batchNormalization', 'neptune'])
     
-#     def binaryModel(curName, curInitializer, curActivation, x_tr=None):
-#         model = Sequential()      
-#         model.add(InputLayer(input_shape=(2, ), name=curName+"0"))
-#         model.add(BatchNormalization())
-#         model.add(Dense(10, kernel_initializer=curInitializer, activation=curActivation, name=curName+"1"))  
-#         model.add(Dense(10, kernel_initializer=curInitializer, activation=curActivation, name=curName+"2"))        
-#         # model.add(BatchNormalization())
-#         model.add(Dense(5, kernel_initializer=curInitializer, activation=curActivation, name=curName+"3"))
-#         model.add(Dense(1, kernel_initializer=curInitializer, activation=curActivation, name=curName+"4"))
-#         return model
-#     curOptimizer = tf.keras.optimizers.RMSprop()
-#     optimizer = curOptimizer
-#     curInitializer = RandomUniform(-1, 1)
-#     model = binaryModel(curName="SIGMOID", curInitializer=curInitializer, curActivation="sigmoid")  
-#     model.compile(optimizer = optimizer, loss='binary_crossentropy', metrics=['accuracy'])
-#     ## Train and Log in Neptune    
-#     curGradHist, curLossHist, curWgtHist = fitModel(X, y, model, optimizer=curOptimizer, npt_exp=npt_exp)
-#     ## log in the plot comparing all layers
-#     npt_exp['Comparing All Layers'].upload(neptune.types.File.as_image(gradientsVis(curGradHist, curLossHist, 
-#                                                                                     modelName='Sigmoid_BN')))
-#     npt_exp.stop()  
+    def binaryModel(curName, curInitializer, curActivation, x_tr=None):
+        model = Sequential()      
+        model.add(InputLayer(input_shape=(2, ), name=curName+"0"))
+        model.add(BatchNormalization())
+        model.add(Dense(10, kernel_initializer=curInitializer, activation=curActivation, name=curName+"1"))  
+        model.add(Dense(10, kernel_initializer=curInitializer, activation=curActivation, name=curName+"2"))        
+        # model.add(BatchNormalization())
+        model.add(Dense(5, kernel_initializer=curInitializer, activation=curActivation, name=curName+"3"))
+        model.add(Dense(1, kernel_initializer=curInitializer, activation=curActivation, name=curName+"4"))
+        return model
+    curOptimizer = tf.keras.optimizers.RMSprop()
+    optimizer = curOptimizer
+    curInitializer = RandomUniform(-1, 1)
+    model = binaryModel(curName="SIGMOID", curInitializer=curInitializer, curActivation="sigmoid")  
+    model.compile(optimizer = optimizer, loss='binary_crossentropy', metrics=['accuracy'])
+    ## Train and Log in Neptune    
+    curGradHist, curLossHist, curWgtHist = fitModel(X, y, model, optimizer=curOptimizer, npt_exp=npt_exp)
+    ## log in the plot comparing all layers
+    npt_exp['Comparing All Layers'].upload(neptune.types.File.as_image(gradientsVis(curGradHist, curLossHist, 
+                                                                                    modelName='Sigmoid_BN')))
+    npt_exp.stop()  
     
-# elif MODELNAME == 'vanSigWgtInit':
-#     npt_exp = neptune.init(    
-#         api_token=os.getenv('NEPTUNE_API_TOKEN'),
-#         project=myProject, 
-#         name='VanishingGradSigmoidWgtInit2', 
-#         tags=['vanishingGradients', 'sigmoid', 'weightInit2', 'neptune']) 
+elif MODELNAME == 'vanSigWgtInit':
+    npt_exp = neptune.init(    
+        api_token=os.getenv('NEPTUNE_API_TOKEN'),
+        project=myProject, 
+        name='VanishingGradSigmoidWgtInit2', 
+        tags=['vanishingGradients', 'sigmoid', 'weightInit2', 'neptune']) 
     
-#     ## Define Neptune callback 
-#     neptune_cbk = NeptuneCallback(run=npt_exp, base_namespace='metrics')
-#     def binaryModel(curName, curInitializer, curActivation, x_tr=None):
-#         model = Sequential()
-#         model.add(InputLayer(input_shape=(2, ), name=curName+"0"))
-#         model.add(Dense(10, kernel_initializer=curInitializer, activation=curActivation, name=curName+"1"))
-#         model.add(Dense(10, kernel_initializer=curInitializer, activation=curActivation, name=curName+"2"))
-#         model.add(Dense(5, kernel_initializer=curInitializer, activation=curActivation,  name=curName+"3"))
-#         model.add(Dense(1, kernel_initializer=curInitializer, activation='sigmoid', name=curName+"4"))
-#         return model 
+    ## Define Neptune callback 
+    neptune_cbk = NeptuneCallback(run=npt_exp, base_namespace='metrics')
+    def binaryModel(curName, curInitializer, curActivation, x_tr=None):
+        model = Sequential()
+        model.add(InputLayer(input_shape=(2, ), name=curName+"0"))
+        model.add(Dense(10, kernel_initializer=curInitializer, activation=curActivation, name=curName+"1"))
+        model.add(Dense(10, kernel_initializer=curInitializer, activation=curActivation, name=curName+"2"))
+        model.add(Dense(5, kernel_initializer=curInitializer, activation=curActivation,  name=curName+"3"))
+        model.add(Dense(1, kernel_initializer=curInitializer, activation='sigmoid', name=curName+"4"))
+        return model 
     
-#     curOptimizer = tf.keras.optimizers.RMSprop()
-#     optimizer = curOptimizer
-#     ### Weight needs variance 
-#     # curInitializer = RandomNormal(mean=0, stddev=9) ## works better than the glorot for this data
-#     curInitializer = 'glorot_uniform'  ## glorot_uniform + Relu good!
-#     ## Compile the model
-#     model = binaryModel(curName="SIGMOID", curInitializer=curInitializer, curActivation="sigmoid") ## sigmoid  
-#     model.compile(optimizer=curOptimizer, loss='binary_crossentropy', metrics=['accuracy'])
-#     ## Train and Log in Neptune    
-#     curGradHist, curLossHist, curWgtHist = fitModel(X, y, model, optimizer=curOptimizer, npt_exp=npt_exp)
-#     print("Final Accuracy", accuracy_score(y, (model(X) > 0.5)))
-#     ## log in the plot comparing all layers
-#     npt_exp['Comparing All Layers'].upload(neptune.types.File.as_image(gradientsVis(curGradHist, curLossHist, 
-#                                                                                     modelName='Sigmoid_NormalWeightInit')))
-#     npt_exp.stop()  
+    curOptimizer = tf.keras.optimizers.RMSprop()
+    optimizer = curOptimizer
+    ### Weight needs variance 
+    # curInitializer = RandomNormal(mean=0, stddev=9) ## works better than the glorot for this data
+    curInitializer = 'glorot_uniform'  ## glorot_uniform + Relu good!
+    ## Compile the model
+    model = binaryModel(curName="SIGMOID", curInitializer=curInitializer, curActivation="sigmoid") ## sigmoid  
+    model.compile(optimizer=curOptimizer, loss='binary_crossentropy', metrics=['accuracy'])
+    ## Train and Log in Neptune    
+    curGradHist, curLossHist, curWgtHist = fitModel(X, y, model, optimizer=curOptimizer, npt_exp=npt_exp)
+    print("Final Accuracy", accuracy_score(y, (model(X) > 0.5)))
+    ## log in the plot comparing all layers
+    npt_exp['Comparing All Layers'].upload(neptune.types.File.as_image(gradientsVis(curGradHist, curLossHist, 
+                                                                                    modelName='Sigmoid_NormalWeightInit')))
+    npt_exp.stop()  
 
-# elif MODELNAME == 'vanSigLR':
-#     npt_exp = neptune.init(    
-#         api_token=os.getenv('NEPTUNE_API_TOKEN'),
-#         project=myProject, 
-#         name='VanishingGradSigmoidLR2', 
-#         tags=['vanishingGradients', 'sigmoid', 'lr2', 'neptune'])
+elif MODELNAME == 'vanSigLR':
+    npt_exp = neptune.init(    
+        api_token=os.getenv('NEPTUNE_API_TOKEN'),
+        project=myProject, 
+        name='VanishingGradSigmoidLR2', 
+        tags=['vanishingGradients', 'sigmoid', 'lr2', 'neptune'])
     
-#     def binaryModel(curName, curInitializer, curActivation, x_tr=None):
-#         model = Sequential()
-#         model.add(InputLayer(input_shape=(2, ), name=curName+"0"))
-#         model.add(Dense(10, kernel_initializer=curInitializer, activation=curActivation, name=curName+"1"))
-#         model.add(Dense(10, kernel_initializer=curInitializer, activation=curActivation, name=curName+"2"))
-#         model.add(Dense(5, kernel_initializer=curInitializer, activation=curActivation,  name=curName+"3"))
-#         model.add(Dense(1, kernel_initializer=curInitializer, activation='sigmoid', name=curName+"4"))
-#         return model 
+    def binaryModel(curName, curInitializer, curActivation, x_tr=None):
+        model = Sequential()
+        model.add(InputLayer(input_shape=(2, ), name=curName+"0"))
+        model.add(Dense(10, kernel_initializer=curInitializer, activation=curActivation, name=curName+"1"))
+        model.add(Dense(10, kernel_initializer=curInitializer, activation=curActivation, name=curName+"2"))
+        model.add(Dense(5, kernel_initializer=curInitializer, activation=curActivation,  name=curName+"3"))
+        model.add(Dense(1, kernel_initializer=curInitializer, activation='sigmoid', name=curName+"4"))
+        return model 
     
-#     curOptimizer = keras.optimizers.Adam(learning_rate=0.008) ## reduce the learning rate!
-#     curInitializer = RandomUniform(-1, 1)
-#     ## Compile the model
-#     model = binaryModel(curName="SIGMOID", curInitializer=curInitializer, curActivation="sigmoid")  
-#     model.compile(optimizer=curOptimizer, loss='binary_crossentropy', metrics=['accuracy'])
-#     ## Train and Log in Neptune    
-#     curGradHist, curLossHist, curWgtHist = fitModel(X, y, model, optimizer=curOptimizer, npt_exp=npt_exp)
-#     ## log in the plot comparing all layers
-#     npt_exp['Comparing All Layers'].upload(neptune.types.File.as_image(gradientsVis(curGradHist, curLossHist, modelName='Sigmoid_Raw')))
-#     npt_exp.stop()  
+    curOptimizer = keras.optimizers.Adam(learning_rate=0.008) ## reduce the learning rate!
+    curInitializer = RandomUniform(-1, 1)
+    ## Compile the model
+    model = binaryModel(curName="SIGMOID", curInitializer=curInitializer, curActivation="sigmoid")  
+    model.compile(optimizer=curOptimizer, loss='binary_crossentropy', metrics=['accuracy'])
+    ## Train and Log in Neptune    
+    curGradHist, curLossHist, curWgtHist = fitModel(X, y, model, optimizer=curOptimizer, npt_exp=npt_exp)
+    ## log in the plot comparing all layers
+    npt_exp['Comparing All Layers'].upload(neptune.types.File.as_image(gradientsVis(curGradHist, curLossHist, modelName='Sigmoid_Raw')))
+    npt_exp.stop()  
     
    
 ############==========================================#############
